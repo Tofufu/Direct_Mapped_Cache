@@ -1,10 +1,36 @@
+
+
 //
 //  dmcache.cpp
-//  
+//
 //
 //  Created by Donna Chow on 12/7/14.
 //
 //
+
+/*
+ 
+ MAIN ERROR:
+ address for a block stored in memory is actually...
+ tag|linenumber|00
+ 
+ so...
+ 0x002D w/ tag = 8 bits, line # = 6 bits, offset = 2 bits...
+ 0000 0000 0010 1101
+ we get rid of offset....and then take
+ 0000 0000 0010 11 . 00 <-- we add a 00 at the end!
+ Thus..... 0000 0000 0010 1100 = 44! We store at 44!
+ 
+ And to retrieve the block... we go in via offset since each block will have [4] w/in main memory
+ 
+ PROBLEM...
+ I kept storing the blocks via their 'tag' in their line so a lot of the times it got overwritten!
+ For example:
+    2104 and 21F6!
+ Both have same tags but different lines! One ends up getting overwrriten in main memory!
+ */
+
+
 #include <iomanip>
 #include <math.h>
 #include <iostream>
@@ -23,6 +49,7 @@
     ifstream filevar("name.txt");
     getline(filevar, line);
 */
+
 
 
 
@@ -48,8 +75,9 @@ class line
     int dirty;
     int block_data[4];
     int tag;
+    int addressing;
     
-    line():dirty(0), tag(-1)
+    line():dirty(0), tag(-1), addressing(0)
     {
         for(int i = 0; i < 4; i++)
         {
@@ -65,6 +93,7 @@ class memory_address
     int tag;
     int line_number;
     int offset;
+    int addressing; //location we're putting into our main memory
 };
 
 class block
@@ -110,6 +139,11 @@ memory_address dec_binary(int address)
     int binary, twos;
     int actual_dec = 0;
     
+    //new
+    int addressing_twos;
+    int addressing_temp = 0;
+    int addressing_counter = 2;
+    
     // offset 2 bits
     for(int i = 0; i < 2; i++)
     {
@@ -128,6 +162,12 @@ memory_address dec_binary(int address)
         binary = address % 2;
         twos = pow(2, i);
         actual_dec = actual_dec + (twos * binary);
+        
+        //new
+        addressing_twos = pow(2,addressing_counter);
+        addressing_temp = addressing_temp + (addressing_twos*binary);
+        ++addressing_counter;
+        
         address = address / 2;
     }
     
@@ -143,12 +183,24 @@ memory_address dec_binary(int address)
         twos = pow(2, counter);
         actual_dec = actual_dec + (twos * binary);
         ++counter;
+        
+        //new
+        addressing_twos = pow(2,addressing_counter);
+        addressing_temp = addressing_temp + (addressing_twos*binary);
+        ++addressing_counter;
+        
         address = address / 2;
     }
     temp.tag = actual_dec;
+    
+    //new
+    temp.addressing = addressing_temp;
+    
     return temp;
 }
     
+
+
 
 
 /*  Reading from Command line:
@@ -171,10 +223,13 @@ int main(int argc, char** argv)
     
     int output_data, output_hit, output_dirty;
     
+    //new
+    int a = 0;
     
     
     ifstream testing_input(argv[1]);    //input file name = argv[1]
-    
+    ofstream outfile("dm-out.txt");
+    outfile << hex << setfill('0') << uppercase;
     
     /*  file input line -> hex to decimal -> address
         file input line -> hex to decimal -> read_write = 0/255
@@ -184,8 +239,20 @@ int main(int argc, char** argv)
     
     while(testing_input >> hex>> address >> read_write >> data)
     {
+        
         input_address = dec_binary( address ); //returns tag, linenum, offset
         
+        
+        a = input_address.addressing ;
+       /* if(read_write == 0)
+        {
+            cout<<"READ! ";
+        }
+        else
+        {
+            cout<<"WRITE! ";
+        }
+        cout<<hex<<input_address.tag<<" "<<input_address.line_number<<" "<<input_address.offset<<"\n";*/
     
         //  READ!
         if(read_write == 0)
@@ -211,12 +278,13 @@ int main(int argc, char** argv)
                 {
                     //setting tag of line to be the new tag (block num)
                     (cache[ (input_address.line_number)] ).tag = input_address.tag;
-                    
+                    //new
+                    (cache[ (input_address.line_number)] ).addressing = input_address.addressing;
                     //retrieve items from block w/in main memory.. aka mainmem[tag]
                     //replace whole lines
                     for(int i = 0; i < 4; i++)
                     {
-                        (cache[ (input_address.line_number)]).block_data[i] = (main_memory[ (input_address.tag) ]).words[i];
+                        (cache[ (input_address.line_number)]).block_data[i] = (main_memory[ a ]).words[i];
                     }
                     
                     //Time to print the specific item now that we're done transferring!
@@ -234,20 +302,21 @@ int main(int argc, char** argv)
                     //writing back
                     for(int i = 0; i < 4; i++)
                     {
-                        (main_memory[ (cache[ (input_address.line_number) ]).tag ]).words[i] = (cache[ (input_address.line_number) ]).block_data[i];
+                        (main_memory[ (cache[ (input_address.line_number)] ).addressing ]).words[i] = (cache[ (input_address.line_number) ]).block_data[i];
                     }
                     
                     //replacing now with items in cache w/ those from main memory
                     for(int i = 0; i<4; i++)
                     {
-                        (cache[ (input_address.line_number)]).block_data[i] = (main_memory[ (input_address.tag) ]).words[i];
+                        (cache[ (input_address.line_number)]).block_data[i] = (main_memory[ a ]).words[i];
                     }
                     
                     
                     //change tag not that we've replaced!
                     //setting tag of line to be the new tag (block num)
                     (cache[ (input_address.line_number)] ).tag = input_address.tag;
-                    
+                    //new
+                    (cache[ (input_address.line_number)] ).addressing = input_address.addressing;
                     // no longer dirty! set dirty = 0
                     (cache[ (input_address.line_number)]).dirty = 0;
                     
@@ -258,10 +327,13 @@ int main(int argc, char** argv)
                 }
             } //MISS
            
+            //       THIS IS FOR TESTING/DEBUGGING! PRINTS OUT TO TERMINAL!
+           // cout<<"This is the input:\n"<<hex<<" "<<address<<" "<<read_write<<" "<<data<<"\n";
+            //cout<<"THIS IS THE OUTPUT:\n"<<hex<<output_data<<" ";
+           //cout<<output_hit<<" "<<output_dirty<<"\n----------\n";
             
-            //cout<<"This is the input:\n"<<hex<<" "<<address<<" "<<read_write<<" "<<data<<"\n";
-            cout<<hex<<output_data<<" ";
-            cout<<output_hit<<" "<<output_dirty<<"\n";
+            //              OUTPUT INTO DM-OUT.TXT      !!!!!
+            outfile<<setw(2)<<(output_data & 0xFF)<<' '<<output_hit<<' '<<output_dirty <<endl;
         } //IF READ
         
         
@@ -285,14 +357,17 @@ int main(int argc, char** argv)
                     //write back
                     for(int i = 0; i < 4; i++)
                     {
-                        (main_memory[ (cache[ (input_address.line_number) ]).tag ]).words[i] = (cache[ (input_address.line_number) ]).block_data[i];
+                        (main_memory[ (cache[ (input_address.line_number)] ).addressing ]).words[i] = (cache[ (input_address.line_number) ]).block_data[i];
                     }
                     
                     //replace
                     (cache[ (input_address.line_number) ]).tag = input_address.tag;
+                    //new
+                    (cache[ (input_address.line_number)] ).addressing = input_address.addressing;
+                    
                     for(int i = 0; i < 4; i++)
                     {
-                      (cache[ (input_address.line_number) ]).block_data[i] = (cache[ (input_address.line_number)]).block_data[i] = (main_memory[ (input_address.tag) ]).words[i];
+                      (cache[ (input_address.line_number)]).block_data[i] = (main_memory[ a ]).words[i];
                     }
                     
                     //WRITING NOW!
@@ -308,9 +383,11 @@ int main(int argc, char** argv)
                 {
                     //replace
                     (cache[ (input_address.line_number) ]).tag = input_address.tag;
+                    //new
+                    (cache[ (input_address.line_number)] ).addressing = input_address.addressing;
                     for(int i = 0; i < 4; i++)
                     {
-                        (cache[ (input_address.line_number) ]).block_data[i] = (cache[ (input_address.line_number)]).block_data[i] = (main_memory[ (input_address.tag) ]).words[i];
+                        (cache[ (input_address.line_number)]).block_data[i] = (main_memory[ a ]).words[i];
                     }
                     
                     //WRITING NOW!
@@ -324,6 +401,9 @@ int main(int argc, char** argv)
             
         }//read
     }
+    
+    testing_input.close();
+    outfile.close();
     return 0;
 }
 
