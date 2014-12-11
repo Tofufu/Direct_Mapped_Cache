@@ -46,11 +46,16 @@ class line
 {
     public:
     int dirty;
-    char block_data[4];
+    int block_data[4];
     int tag;
     
     line():dirty(0), tag(-1)
-    {}
+    {
+        for(int i = 0; i < 4; i++)
+        {
+            block_data[i] = 0;
+        }
+    }
 };
 
 
@@ -164,6 +169,7 @@ int main(int argc, char** argv)
     int address, read_write, data;
     line checking;
     
+    
     int output_data, output_hit, output_dirty;
     
     
@@ -175,6 +181,8 @@ int main(int argc, char** argv)
         file input line -> hex to decimal -> read_write = 0/255
         file input line -> hex to decimal -> data
     */
+    
+    
     while(testing_input >> hex>> address >> read_write >> data)
     {
         input_address = dec_binary( address ); //returns tag, linenum, offset
@@ -188,7 +196,7 @@ int main(int argc, char** argv)
             //HIT!!!
             if( input_address.tag == checking.tag)
             {
-                output_data = checking.block_data[ (input_address.offset) ]
+                output_data = checking.block_data[ (input_address.offset) ];
                 output_hit = 1;
                 output_dirty = checking.dirty;
             }
@@ -196,17 +204,56 @@ int main(int argc, char** argv)
             //MISS!!
             if( input_address.tag != checking.tag)
             {
-                output_hit = 0; //MISS
                 
+                //              NOT DIRTY + MISS
                 //if line not dirty we can just replace with stuff from main memory.
-                (if (cache[ (input_address.line_number)]).dirty == 0)
+                if( checking.dirty == 0)
                 {
+                    //setting tag of line to be the new tag (block num)
                     (cache[ (input_address.line_number)] ).tag = input_address.tag;
                     
+                    //retrieve items from block w/in main memory.. aka mainmem[tag]
+                    //replace whole lines
+                    for(int i = 0; i < 4; i++)
+                    {
+                        (cache[ (input_address.line_number)]).block_data[i] = (main_memory[ (input_address.tag) ]).words[i];
+                    }
+                    
+                    //Time to print the specific item now that we're done transferring!
+                    
+                    output_data = (cache[ (input_address.line_number)]).block_data[ (input_address.offset)];
+                    output_hit = 0; //MISS
+                    output_dirty = 0;
                     
                 }
-            }
-        }
+                
+                //          else DIRTY!
+                //          NEED TO WRITE BACK BEFORE COPYING FORWARD.
+                else
+                {
+                    //writing back
+                    for(int i = 0; i < 4; i++)
+                    {
+                        (main_memory[ (cache[ (input_address.line_number) ]).tag ]).words[i] = (cache[ (input_address.line_number) ]).block_data[i];
+                    }
+                    
+                    //replacing now with items in cache w/ those from main memory
+                    for(int i = 0; i<4; i++)
+                    {
+                        (cache[ (input_address.line_number)]).block_data[i] = (main_memory[ (input_address.tag) ]).words[i];
+                    }
+                    
+                    // no longer dirty! set dirty = 0
+                    (cache[ (input_address.line_number)]).tag = 0;
+                    
+                    
+                    output_data = (cache[ (input_address.line_number)]).block_data[ (input_address.offset)];
+                    output_hit = 0; //MISS
+                    output_dirty = 0;
+                }
+            } //MISS
+            cout<<output_data<<" "<<output_hit<<" "<<output_dirty<<"\n---------\n";
+        } //IF READ
     }
     return 0;
 }
