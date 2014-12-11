@@ -146,7 +146,6 @@ memory_address dec_binary(int address)
         address = address / 2;
     }
     temp.tag = actual_dec;
-    
     return temp;
 }
     
@@ -187,6 +186,7 @@ int main(int argc, char** argv)
     {
         input_address = dec_binary( address ); //returns tag, linenum, offset
         
+    
         //  READ!
         if(read_write == 0)
         {
@@ -243,8 +243,13 @@ int main(int argc, char** argv)
                         (cache[ (input_address.line_number)]).block_data[i] = (main_memory[ (input_address.tag) ]).words[i];
                     }
                     
+                    
+                    //change tag not that we've replaced!
+                    //setting tag of line to be the new tag (block num)
+                    (cache[ (input_address.line_number)] ).tag = input_address.tag;
+                    
                     // no longer dirty! set dirty = 0
-                    (cache[ (input_address.line_number)]).tag = 0;
+                    (cache[ (input_address.line_number)]).dirty = 0;
                     
                     
                     output_data = (cache[ (input_address.line_number)]).block_data[ (input_address.offset)];
@@ -252,8 +257,72 @@ int main(int argc, char** argv)
                     output_dirty = 0;
                 }
             } //MISS
-            cout<<output_data<<" "<<output_hit<<" "<<output_dirty<<"\n---------\n";
+           
+            
+            //cout<<"This is the input:\n"<<hex<<" "<<address<<" "<<read_write<<" "<<data<<"\n";
+            cout<<hex<<output_data<<" ";
+            cout<<output_hit<<" "<<output_dirty<<"\n";
         } //IF READ
+        
+        
+        //WRITE!!!!
+        if( read_write == 255)
+        {
+            // HIT! We have the same block in the line as input for read!
+            if( input_address.tag == (cache[ (input_address.line_number) ]).tag)
+            {
+                (cache[ (input_address.line_number) ]).block_data[ (input_address.offset) ] = data;
+                //it's dirty now!
+                (cache[ (input_address.line_number) ]).dirty = 1;
+            }
+            
+            //Else we just missed it! so we have to replace it in the cache
+            else
+            {
+                //else if it's dirty we have to write back first before we replace it in the cache
+                if( (cache[ (input_address.line_number) ]).dirty == 1)
+                {
+                    //write back
+                    for(int i = 0; i < 4; i++)
+                    {
+                        (main_memory[ (cache[ (input_address.line_number) ]).tag ]).words[i] = (cache[ (input_address.line_number) ]).block_data[i];
+                    }
+                    
+                    //replace
+                    (cache[ (input_address.line_number) ]).tag = input_address.tag;
+                    for(int i = 0; i < 4; i++)
+                    {
+                      (cache[ (input_address.line_number) ]).block_data[i] = (cache[ (input_address.line_number)]).block_data[i] = (main_memory[ (input_address.tag) ]).words[i];
+                    }
+                    
+                    //WRITING NOW!
+                    (cache[ (input_address.line_number) ]).block_data[(input_address.offset)] = data;
+                    
+                    //ALREADY DIRTY! Don't need to set again!
+                    
+                    
+                } //dirty
+                
+                //else not dirty so we just replace + write over
+                else
+                {
+                    //replace
+                    (cache[ (input_address.line_number) ]).tag = input_address.tag;
+                    for(int i = 0; i < 4; i++)
+                    {
+                        (cache[ (input_address.line_number) ]).block_data[i] = (cache[ (input_address.line_number)]).block_data[i] = (main_memory[ (input_address.tag) ]).words[i];
+                    }
+                    
+                    //WRITING NOW!
+                    (cache[ (input_address.line_number) ]).block_data[(input_address.offset)] = data;
+                    
+                    //It's dirty now!
+                    (cache[ (input_address.line_number) ]).dirty = 1;
+                }
+                
+            }//miss
+            
+        }//read
     }
     return 0;
 }
